@@ -1,15 +1,15 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
 
-# https://bitbucket.org/robertkoehler/shotwell-export
-
 import sqlite3 as lite
 import sys
 import os
 import shutil
 import queries
+import time
+import re
 
-year = 2007
+year = 2006
 
 dataDir = "data/"
 thumbsDir = "thumbs/"
@@ -42,16 +42,41 @@ with dstCon:
         #
         srcCur = srcCon.cursor()
         srcCur.execute(queries.SELECT_VERSION)
-        verdata = srcCur.fetchone()
-        dstCur.execute(queries.INSERT_VERSION, verdata)
+        verData = srcCur.fetchone()
+        dstCur.execute(queries.INSERT_VERSION, verData)
 
         eventIds = []
+
+        def makeDirName(event):
+            reDate = re.compile("^(\w+ \w+ \d+, \d+)(.*)")
+            m = reDate.match(event)
+            if m:
+                date = m.group(1)
+                date = time.strptime(date, "%a %b %d, %Y")
+                date = time.strftime("%Y_%m_%d", date)
+                dir = date + m.group(2)
+            else:
+                dir = event
+            return dir
+
+        def getDstDir(event, srcFile, expTime):
+            if event:
+                dstDir = dstBaseDir + makeDirName(event)
+            elif srcFile.startswith(srcPhotosDir):
+                dir = srcFile[len(srcPhotosDir):]
+                dstDir = dstBaseDir + dir
+            else:
+                date = time.localtime(expTime)
+                date = time.strftime("%Y_%m_%d", date)
+                dstDir = dstBaseDir + date
+            return dstDir
 
         def copy_registers(cur, INSERT, isPhoto):
             i = 0
             for data in cur:
                 imgId = data[0]
                 srcFile = data[1]
+                expTime = data[isPhoto and 6 or 8]
 
                 # register eventId
                 eventId = str(data[-2])
@@ -64,23 +89,15 @@ with dstCon:
                 # event string is not time-ordered. Try to convert to
                 # something time-ordered
 
-                # import time
-                # date = time.strptime("Fri Sep 1, 2006", "%a %b %d, %Y")
-                # time.strftime("%Y_%m_%d", date)
-
                 event = data[-1]
-                if event:
-                    dstDir = dstBaseDir + event
-                elif srcFile.startswith(srcPhotosDir):
-                    dstDir = dstBaseDir + srcFile[len(srcPhotosDir):]
-                else:
-                    dstDir = dstBaseDir + "_misc_"
+                dstDir = getDstDir(event, srcFile, expTime)
 
                 if not os.path.exists(dstDir):
                     os.makedirs(dstDir)
 
                 # copy file
-                dstFile = "%s/%s" % (dstDir, srcFile.split('/')[-1])
+                dstFile = srcFile.split('/')[-1]
+                dstFile = "%s/%s" % (dstDir, dstFile)
                 # print "copy image %d - %s - %s" % (imgId, event, srcFile)
                 shutil.copy(srcFile, dstDir)
 
@@ -103,10 +120,12 @@ with dstCon:
             return i
 
         i = 0
-        srcCur.execute(queries.SELECT_PHOTO_EVENT_BY_YEAR(year))
+        sql = queries.SELECT_PHOTO_EVENT_BY_YEAR(year)
+        srcCur.execute(sql)
         i += copy_registers(srcCur, queries.INSERT_PHOTO, True)
 
-        srcCur.execute(queries.SELECT_VIDEO_EVENT_BY_YEAR(year))
+        sql = queries.SELECT_VIDEO_EVENT_BY_YEAR(year)
+        srcCur.execute(sql)
         i += copy_registers(srcCur, queries.INSERT_VIDEO, False)
 
         sql = queries.SELECT_EVENTS_BY_IDS(eventIds)

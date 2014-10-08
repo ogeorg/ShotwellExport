@@ -92,17 +92,20 @@ INSERT_PHOTO = "INSERT INTO PhotoTable VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,
 INSERT_VIDEO = "INSERT INTO VideoTable VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"
 INSERT_EVENT = "INSERT INTO EventTable VALUES(?,?,?,?,?)"
 
-
+# SELECT strftime('%s', '2007-01-01'), strftime('%s', '2008-01-01')
+# SELECT PhotoTable.*, EventTable.id, EventTable.name FROM PhotoTable LEFT JOIN EventTable ON PhotoTable.event_id = EventTable.id WHERE timestamp between strftime('%s', '2007-01-01') and strftime('%s', '2008-01-01')
 def SELECT_MEDIA_EVENT_BY_YEAR(table, year):
     strftime = "strftime('%%s', '%d-01-01')"
     t1 = strftime % year
     t2 = strftime % (year + 1)
-    tscond = "timestamp between %s and %s" % (t1, t2)
-    sql = "SELECT %(mediatable)s.*, EventTable.id, EventTable.name FROM %(mediatable)s " % {'mediatable': table}
-    sql += "LEFT JOIN EventTable ON %(mediatable)s.event_id = EventTable.id" % {'mediatable': table}
-    sql += " WHERE " + tscond
+    inLimits = "between %s and %s" % (t1, t2)
+    sql = """
+        SELECT %(mediatable)s.*, EventTable.id, EventTable.name
+        FROM %(mediatable)s
+        LEFT JOIN EventTable ON %(mediatable)s.event_id = EventTable.id
+        WHERE (exposure_time %(inLimits)s) OR (exposure_time = 0 AND timestamp %(inLimits)s)
+    """ % {'mediatable': table, 'inLimits': inLimits}
     return sql
-
 
 def SELECT_PHOTO_EVENT_BY_YEAR(year):
     sql = SELECT_MEDIA_EVENT_BY_YEAR('PhotoTable', year)
